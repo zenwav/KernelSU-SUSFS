@@ -1,3 +1,8 @@
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs.h>
+extern int ksu_handle_susfs_cmd(unsigned int cmd, void __user **arg);
+#endif // #ifdef CONFIG_KSU_SUSFS
+
 static int anon_ksu_release(struct inode *inode, struct file *filp)
 {
 	pr_info("ksu fd released\n");
@@ -84,6 +89,13 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd, void __user 
 	// only root is allowed for these commands
 	if (current_uid().val != 0)
 		return 0;
+
+#ifdef CONFIG_KSU_SUSFS
+    // If magic2 is susfs and current process is root
+    if (magic2 == SUSFS_MAGIC) {
+        return ksu_handle_susfs_cmd(cmd, arg);
+    }
+#endif
 	
 	// extensions
 	u64 reply = (u64)*arg;

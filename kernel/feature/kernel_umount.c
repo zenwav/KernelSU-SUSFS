@@ -1,3 +1,8 @@
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs_def.h>
+extern struct work_struct susfs_extra_works;
+#endif // #ifdef CONFIG_KSU_SUSFS
+
 static bool ksu_kernel_umount_enabled __read_mostly = true;
 
 static int kernel_umount_feature_get(u64 *value)
@@ -52,12 +57,6 @@ static inline int ksu_handle_umount(struct cred *new, const struct cred *old)
 	uid_t new_uid = ksu_get_uid_t(new->uid);
 	uid_t old_uid = ksu_get_uid_t(old->uid);
 
-	if (!ksu_kernel_umount_enabled)
-		return 0;
-
-	// if there isn't any module mounted, just ignore it!
-	if (!ksu_module_mounted)
-		return 0;
 
 	// There are 6 scenarios:
 	// 1. Normal app: zygote -> appuid
@@ -81,6 +80,17 @@ static inline int ksu_handle_umount(struct cred *new, const struct cred *old)
 		pr_info("handle umount ignore non zygote child: %d\n", current->pid);
 		return 0;
 	}
+    
+	if (!ksu_kernel_umount_enabled)
+		goto skip_umount_task;
+
+	// if there isn't any module mounted, just ignore it!
+	if (!ksu_module_mounted)
+		goto skip_umount_task;
+
+	if (!ksu_cred)
+		goto skip_umount_task;
+
 	// umount the target mnt
 	pr_info("handle umount for uid: %d, pid: %d\n", new_uid, current->pid);
 
@@ -95,6 +105,13 @@ static inline int ksu_handle_umount(struct cred *new, const struct cred *old)
 	up_read(&mount_list_lock);
 
 	revert_creds(saved);
+
+skip_umount_task:
+    // do susfs setuid when susfs enabled
+#ifdef CONFIG_KSU_SUSFS
+    schedule_work(&susfs_extra_works);
+    susfs_set_current_proc_umounted();
+#endif
 
 	return 0;
 }

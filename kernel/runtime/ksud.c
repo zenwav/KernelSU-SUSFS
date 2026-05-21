@@ -90,6 +90,9 @@ void on_boot_completed(void)
 	ksu_boot_completed = true;
 	pr_info("on_boot_completed!\n");
 	track_throne(true);
+#ifdef CONFIG_KSU_SUSFS
+	susfs_start_sdcard_monitor_fn();
+#endif
 }
 
 static ssize_t (*orig_read)(struct file *, char __user *, size_t, loff_t *);
