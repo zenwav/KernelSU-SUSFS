@@ -1,3 +1,7 @@
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs_def.h>
+#endif // #ifdef CONFIG_KSU_SUSFS
+
 #ifdef CONFIG_KSU_TAMPER_SYSCALL_TABLE
 #define SUCOMPAT_HOOK_TYPE static __always_inline int
 #else
@@ -329,6 +333,14 @@ int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv, voi
 		return 0;
 
 	ksu_sucompat_kernel_common((void **)&filename->name, argv, envp, "do_execveat_common");
+#ifdef CONFIG_KSU_SUSFS
+	if (likely(filename->name) &&
+	    likely(strstr(filename->name, "/app_process") == NULL &&
+	           strstr(filename->name, "/adbd") == NULL) &&
+	    !susfs_is_current_proc_umounted()) {
+		susfs_set_current_proc_umounted();
+	}
+#endif
 	return 0;
 }
 #else

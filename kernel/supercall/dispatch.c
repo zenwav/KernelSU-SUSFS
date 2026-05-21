@@ -1,3 +1,7 @@
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs_def.h>
+#endif
+
 static int do_grant_root(void __user *arg)
 {
 	int ret;
@@ -404,6 +408,15 @@ static int do_manage_mark(void __user *arg)
 
 	switch (cmd.operation) {
 		case KSU_MARK_GET: {
+		#ifdef CONFIG_KSU_SUSFS
+			if (susfs_is_current_proc_umounted()) {
+				ret = 0; // process is umounted = not flagged
+			} else {
+			ret = 1; // process is NOT umounted = flagged
+			}
+			pr_info("manage_mark: susfs ret for pid %d: %d\n", cmd.pid, ret);
+			cmd.result = (u32)ret;
+		#else	
 			// on this one, we return seccomp status of a pid instead
 			// at the very least we have partial featureset
 			ret = ksu_get_task_mark(cmd.pid);
@@ -412,6 +425,7 @@ static int do_manage_mark(void __user *arg)
 			    return ret;
 			}
 			cmd.result = (u32)ret;
+		#endif	
 			break;
 		}
 #if 0 // TODO: revisit this sometime
@@ -727,3 +741,90 @@ void __init ksu_supercall_dump_commands(void)
 }
 
 void ksu_supercall_cleanup_state(void) {}
+
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs.h>
+
+int ksu_handle_susfs_cmd(unsigned int cmd, void __user **arg)
+{
+    switch (cmd) {
+#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+    case CMD_SUSFS_ADD_SUS_PATH: {
+        susfs_add_sus_path(arg);
+        return 0;
+    }
+    case CMD_SUSFS_ADD_SUS_PATH_LOOP: {
+        susfs_add_sus_path_loop(arg);
+        return 0;
+    }
+#endif //#ifdef CONFIG_KSU_SUSFS_SUS_PATH
+#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+    case CMD_SUSFS_HIDE_SUS_MNTS_FOR_NON_SU_PROCS: {
+        susfs_set_hide_sus_mnts_for_non_su_procs(arg);
+        return 0;
+    }
+#endif //#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+    case CMD_SUSFS_ADD_SUS_KSTAT: {
+        susfs_add_sus_kstat(arg);
+        return 0;
+    }
+    case CMD_SUSFS_UPDATE_SUS_KSTAT: {
+        susfs_update_sus_kstat(arg);
+        return 0;
+    }
+    case CMD_SUSFS_ADD_SUS_KSTAT_STATICALLY: {
+        susfs_add_sus_kstat(arg);
+        return 0;
+    }
+#endif //#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
+    case CMD_SUSFS_SET_UNAME: {
+        susfs_set_uname(arg);
+        return 0;
+    }
+#endif //#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
+#ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
+    case CMD_SUSFS_ENABLE_LOG: {
+        susfs_enable_log(arg);
+        return 0;
+    }
+#endif //#ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
+#ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
+    case CMD_SUSFS_SET_CMDLINE_OR_BOOTCONFIG: {
+        susfs_set_cmdline_or_bootconfig(arg);
+        return 0;
+    }
+#endif //#ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
+#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+    case CMD_SUSFS_ADD_OPEN_REDIRECT: {
+        susfs_add_open_redirect(arg);
+        return 0;
+    }
+#endif //#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+    case CMD_SUSFS_ADD_SUS_MAP: {
+        susfs_add_sus_map(arg);
+        return 0;
+    }
+#endif // #ifdef CONFIG_KSU_SUSFS_SUS_MAP
+    case CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING: {
+        susfs_set_avc_log_spoofing(arg);
+        return 0;
+    }
+    case CMD_SUSFS_SHOW_ENABLED_FEATURES: {
+        susfs_get_enabled_features(arg);
+        return 0;
+    }
+    case CMD_SUSFS_SHOW_VARIANT: {
+        susfs_show_variant(arg);
+        return 0;
+    }
+    case CMD_SUSFS_SHOW_VERSION: {
+        susfs_show_version(arg);
+        return 0;
+    }
+    }
+    return 0;
+}
+#endif
