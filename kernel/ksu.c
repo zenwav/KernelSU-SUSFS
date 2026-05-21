@@ -41,6 +41,9 @@
 #include "feature/selinux_hide.h"
 #include "feature/sucompat.h"
 #include "feature/sulog.h"
+#ifdef CONFIG_KSU_SUSFS
+#include <linux/susfs.h>
+#endif
 #include "runtime/ksud.h"
 #include "sulog/event.h"
 #include "sulog/fd.h"
@@ -183,6 +186,10 @@ static int __init kernelsu_init(void)
 	ksu_feature_init();
 
 	ksu_supercalls_init();
+
+#ifdef CONFIG_KSU_SUSFS
+	susfs_init();
+#endif
 
 	ksu_sucompat_init(); // so the feature is registered
 
