@@ -240,7 +240,7 @@ static int ksu_branch_link_patch_init()
 	pr_info("sucompat_hijack: __do_execve_file: ret %d \n", ret);
 	if (ret) {
 		symbol_addr = (uintptr_t)&do_execve;
-		ret = su_hunt_symbol_callsite(target_callsite, 128 * sizeof(void *), symbol_addr, (uintptr_t)&do_execve);
+		ret = su_hunt_symbol_callsite(target_callsite, 128 * sizeof(void *), symbol_addr, (uintptr_t)&ksu_do_execve);
 		pr_info("sucompat_hijack: do_execve: ret %d \n", ret);
 	}
 #endif
