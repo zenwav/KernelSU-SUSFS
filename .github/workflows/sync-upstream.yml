@@ -1,0 +1,102 @@
+name: Auto-Sync with KernelSU Upstream
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      custom_commits:
+        description: 'Number of custom commits to preserve'
+        required: true
+        default: '3'
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-upstream-master
+  cancel-in-progress: false
+
+env:
+  BRANCH: master
+  UPSTREAM_REPO: backslashxx/KernelSU
+  CUSTOM_COMMITS: ${{ inputs.custom_commits || '3' }}
+
+jobs:
+  sync-and-cherry-pick:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout fork branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.BRANCH }}
+          fetch-depth: 0 
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream
+        shell: bash
+        run: |
+          set -euo pipefail
+          git remote add upstream "https://github.com/${UPSTREAM_REPO}.git"
+          git fetch --force upstream "${BRANCH}"
+
+      - name: Check release dates and transplant
+        shell: bash
+        env:
+          # We use the token to prevent GitHub API rate limiting
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+        run: |
+          set -euo pipefail
+
+          # 1. Fetch the published date of the newest upstream release via GitHub API
+          RELEASE_DATE=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/${UPSTREAM_REPO}/releases/latest" | jq -r .published_at)
+
+          # Fail-safe just in case the API glitches or returns null
+          if [ "$RELEASE_DATE" = "null" ] || [ -z "$RELEASE_DATE" ]; then
+            echo "ERROR: Could not fetch upstream release date."
+            exit 1
+          fi
+
+          # Convert upstream release date to Unix Epoch (seconds since 1970) for easy math
+          RELEASE_EPOCH=$(date -d "$RELEASE_DATE" +%s)
+
+          # 2. Get the committer date of your newest commit in ISO 8601 format (%cI)
+          OUR_DATE=$(git log -1 --format="%cI" HEAD)
+          OUR_EPOCH=$(date -d "$OUR_DATE" +%s)
+
+          # 3. Compare the timestamps
+          if [ "$OUR_EPOCH" -ge "$RELEASE_EPOCH" ]; then
+            echo "Our fork's top commit (Epoch: $OUR_EPOCH) is equal to or newer than the latest release (Epoch: $RELEASE_EPOCH)."
+            echo "No update required. Exiting smoothly."
+            exit 0
+          fi
+
+          echo "New upstream release detected! Transplanting ${CUSTOM_COMMITS} commits..."
+          
+          # 4. Grab your custom commits
+          mapfile -t commits < <(
+            git log -${CUSTOM_COMMITS} --reverse --format="%H"
+          )
+          
+          # 5. Hard reset your repository to exactly match the new upstream state
+          UPSTREAM_TIP=$(git rev-parse "upstream/${BRANCH}")
+          git reset --hard "$UPSTREAM_TIP"
+          
+          # 6. Apply your custom commits back on top
+          for commit in "${commits[@]}"; do
+            echo "Cherry-picking $commit..."
+            git cherry-pick "$commit" || {
+              echo "ERROR: Cherry-pick failed! Upstream changes likely conflict with your patches."
+              exit 1
+            }
+          done
+
+          # 7. Overwrite your fork's history
+          git push origin "HEAD:${BRANCH}" --force-with-lease
